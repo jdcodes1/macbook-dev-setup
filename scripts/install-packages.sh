@@ -36,10 +36,17 @@ fi
 
 echo "Installing packages from Brewfile..."
 
-# Function to check if a font cask is already installed
-is_font_installed() {
-    local font_name="$1"
-    brew list --cask 2>/dev/null | grep -q "^${font_name}$"
+# Pre-fetch installed package lists (single call each, ~200ms total vs ~10s for per-package checks)
+echo "Checking installed packages..."
+INSTALLED_FORMULAE=$(brew list --formula -1 2>/dev/null)
+INSTALLED_CASKS=$(brew list --cask -1 2>/dev/null)
+
+is_formula_installed() {
+    echo "$INSTALLED_FORMULAE" | grep -qx "$1"
+}
+
+is_cask_installed() {
+    echo "$INSTALLED_CASKS" | grep -qx "$1"
 }
 
 # Parse and install packages with better error handling
@@ -62,7 +69,7 @@ install_packages() {
     while IFS= read -r line; do
         if [[ "$line" =~ ^brew[[:space:]]+"(.+)" ]]; then
             local formula="${BASH_REMATCH[1]}"
-            if brew list --formula "$formula" &>/dev/null; then
+            if is_formula_installed "$formula"; then
                 echo "Formula $formula already installed, skipping..."
             else
                 echo "Installing formula: $formula"
@@ -86,7 +93,7 @@ install_packages() {
             local cask="${BASH_REMATCH[1]}"
             # Special handling for fonts
             if [[ "$cask" =~ ^font- ]]; then
-                if is_font_installed "$cask"; then
+                if is_cask_installed "$cask"; then
                     echo "Font $cask already installed, skipping..."
                     skipped_fonts+=("$cask")
                     continue
@@ -109,7 +116,7 @@ install_packages() {
                     skipped_fonts+=("$cask (existing files)")
                     continue
                 fi
-            elif brew list --cask "$cask" &>/dev/null; then
+            elif is_cask_installed "$cask"; then
                 echo "Cask $cask already installed, skipping..."
                 continue
             fi
