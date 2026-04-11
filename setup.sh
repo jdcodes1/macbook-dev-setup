@@ -402,29 +402,40 @@ main_setup() {
     # Install or update based on state
     if [[ "$setup_state" == "fresh" ]]; then
         # Fresh installation
+        phase_start
         ui_spinner "Installing Homebrew" ./scripts/install-homebrew.sh
+        phase_end "Homebrew"
 
         print_step "Installing packages..."
+        phase_start
         if [[ "$is_minimal" == "true" ]]; then
             ui_spinner "Installing packages (minimal)" env BREWFILE="homebrew/Brewfile.minimal" ./scripts/install-packages.sh
+            phase_end "Packages" "minimal"
         elif [[ -n "$SETUP_PROFILE" ]]; then
             if ! resolve_profile "$SETUP_PROFILE"; then
                 exit 1
             fi
             print_profile_summary "$SETUP_PROFILE"
             ui_spinner "Installing packages (profile: $SETUP_PROFILE)" env BREWFILE=$(filter_brewfile "homebrew/Brewfile") ./scripts/install-packages.sh
+            phase_end "Packages" "profile: $SETUP_PROFILE"
         else
             ui_spinner "Installing packages" ./scripts/install-packages.sh
+            phase_end "Packages"
         fi
 
         # Not wrapped in spinner — needs user interaction for email/org prompts
         print_step "Setting up dotfiles..."
+        phase_start
         ./scripts/setup-dotfiles.sh
+        phase_end "Dotfiles"
 
         # Not wrapped in spinner — needs user interaction for diff review
         print_step "Setting up global Claude configuration..."
+        phase_start
         ./scripts/setup-claude-global.sh
-        
+        phase_end "Claude global config"
+
+        phase_start
         if [[ "${PROFILE_SKIP_AGENTIC:-false}" != "true" ]]; then
             print_step "Setting up Claude agentic workflow..."
             if command -v claude &>/dev/null; then
@@ -436,16 +447,24 @@ main_setup() {
         else
             print_info "Skipping agentic setup (profile: $SETUP_PROFILE)"
         fi
+        phase_end "Claude agentic setup"
 
+        phase_start
         ui_spinner "Configuring applications" ./scripts/setup-applications.sh
+        phase_end "Applications"
 
+        phase_start
         ui_spinner "Configuring terminal fonts" ./scripts/setup-terminal-fonts.sh
+        phase_end "Terminal fonts"
 
+        phase_start
         ui_spinner "Configuring macOS settings" ./scripts/setup-macos.sh
+        phase_end "macOS settings"
         
     else
         # Update existing installation
         ui_section_header "Package Sync"
+        phase_start
         if command -v brew &>/dev/null; then
             ui_spinner "Updating Homebrew" brew update
             if [[ "$is_minimal" == "true" ]] && [[ -f "homebrew/Brewfile.minimal" ]]; then
@@ -466,8 +485,10 @@ main_setup() {
                 ui_spinner_tolerant "Syncing local packages" brew bundle --file="homebrew/Brewfile.local"
             fi
         fi
+        phase_end "Package sync"
 
         ui_section_header "Package Updates"
+        phase_start
         if command -v brew &>/dev/null; then
             # Check what needs updating — output kept visible (user needs the list)
             local outdated_packages=$(brew outdated -q 2>/dev/null)
@@ -492,8 +513,10 @@ main_setup() {
                 ui_spinner "Cleaning up old versions" brew cleanup -q
             fi
         fi
+        phase_end "Package updates"
 
         ui_section_header "Configuration Sync"
+        phase_start
         # Not wrapped in spinner — needs user interaction for diff review
         if [[ -f "./scripts/setup-dotfiles.sh" ]]; then
             print_step "Updating dotfiles..."
@@ -517,6 +540,7 @@ main_setup() {
         else
             print_info "Skipping agentic setup (profile: $SETUP_PROFILE)"
         fi
+        phase_end "Configuration sync"
     fi
     
     # Run extension pack scripts (profiles were already loaded before package install)
@@ -562,6 +586,9 @@ main_setup() {
 
     # Show any deferred errors before the summary
     setup_errors_show
+
+    # Show timing breakdown
+    phase_summary
 
     ui_summary_box "Setup Complete!" "${summary_lines[@]}"
 

@@ -422,6 +422,81 @@ ui_table() {
 
 export -f ui_table
 
+# =============================================================================
+# Phase timing — tracks duration of each setup phase
+# =============================================================================
+
+# Initialize timing state
+_PHASE_TIMINGS=()
+_PHASE_NAMES=()
+_PHASE_EXTRAS=()
+_CURRENT_PHASE_START=""
+
+# Start timing a phase
+# Usage: phase_start "Phase Name"
+phase_start() {
+    _CURRENT_PHASE_START=$(date +%s)
+}
+
+# End timing and record result
+# Usage: phase_end "Phase Name" ["extra info"]
+phase_end() {
+    local name="$1"
+    local extra="${2:-}"
+    if [[ -z "$_CURRENT_PHASE_START" ]]; then
+        return 0
+    fi
+    local elapsed=$(( $(date +%s) - _CURRENT_PHASE_START ))
+    _PHASE_NAMES+=("$name")
+    _PHASE_TIMINGS+=("$elapsed")
+    _PHASE_EXTRAS+=("$extra")
+    _CURRENT_PHASE_START=""
+}
+
+# Format seconds as human-readable duration
+_format_duration() {
+    local secs=$1
+    if (( secs >= 60 )); then
+        printf '%dm %ds' $((secs / 60)) $((secs % 60))
+    else
+        printf '%ds' "$secs"
+    fi
+}
+
+# Print the timing breakdown table
+phase_summary() {
+    if [[ ${#_PHASE_NAMES[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    echo ""
+    echo -e "${BLUE:-\033[0;34m}── Timing Breakdown ──${NC:-\033[0m}"
+
+    local i
+    for i in "${!_PHASE_NAMES[@]}"; do
+        local name="${_PHASE_NAMES[$i]}"
+        local secs="${_PHASE_TIMINGS[$i]}"
+        local extra="${_PHASE_EXTRAS[$i]}"
+        local duration
+        duration=$(_format_duration "$secs")
+
+        # Right-align duration at column 40
+        local pad=$(( 36 - ${#name} ))
+        (( pad < 1 )) && pad=1
+        local spaces
+        spaces=$(printf '%*s' "$pad" '')
+
+        if [[ -n "$extra" ]]; then
+            printf '  %-s%s%s  %s\n' "$name" "$spaces" "$duration" "($extra)"
+        else
+            printf '  %-s%s%s\n' "$name" "$spaces" "$duration"
+        fi
+    done
+    echo ""
+}
+
+export -f phase_start phase_end phase_summary _format_duration
+
 # Export helper functions for subshell use
 export -f _ui_has
 export -f _ui_is_interactive
